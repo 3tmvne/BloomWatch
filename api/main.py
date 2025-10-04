@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 from typing import Any
 import numpy as np
 
-from src.stac_search import search_sentinel2_data
+# Import the new function and remove the cache
+from src.stac_search import search_sentinel2_data, get_item_by_id
 from src.ndvi_processor import calculate_ndvi
 
 app = FastAPI(
@@ -12,8 +13,8 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# A simple in-memory cache to store search results temporarily
-search_cache = {}
+# The in-memory cache is no longer needed and can be removed.
+# search_cache = {} 
 
 @app.get("/health", tags=["Status"])
 async def health_check():
@@ -22,7 +23,7 @@ async def health_check():
 
 @app.post("/search", tags=["Data"])
 async def search_data(aoi: dict[str, Any]):
-    """Performs a STAC search and caches the results."""
+    """Performs a STAC search."""
     try:
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=30)
@@ -31,10 +32,7 @@ async def search_data(aoi: dict[str, Any]):
         if not items:
             raise HTTPException(status_code=404, detail="No items found.")
         
-        # Cache the found items by their ID
-        for item in items:
-            search_cache[item.id] = item
-
+        # No need to cache results anymore. Just return the summary.
         item_summaries = []
         for item in items:
             thumbnail_asset = item.assets.get("thumbnail")
@@ -53,18 +51,16 @@ async def search_data(aoi: dict[str, Any]):
 @app.post("/process/{item_id}", tags=["Processing"])
 async def process_item(item_id: str):
     """
-    Calculates NDVI for a specific STAC item found via the /search endpoint.
+    Fetches a STAC item by ID and calculates its NDVI. This is now stateless.
     """
-    # Find the item in our simple cache
-    item = search_cache.get(item_id)
+    # --- UPDATED LOGIC ---
+    # Fetch the item directly instead of looking in a cache.
+    item = get_item_by_id(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found. Please run a /search first.")
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' could not be found in the Planetary Computer catalog.")
 
     try:
-        # Calculate NDVI
         ndvi_array = calculate_ndvi(item)
-
-        # Return statistics about the NDVI array instead of the whole array
         return {
             "item_id": item_id,
             "message": "NDVI calculation successful.",
