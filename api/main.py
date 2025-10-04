@@ -42,19 +42,21 @@ async def search_data(aoi: dict[str, Any]):
         if items is None or not items:
             raise HTTPException(status_code=404, detail="No items found for the given AOI and date range.")
 
-        # Return a simplified summary of the found items
-        item_summaries = [
-            {
+        # --- START OF FIX ---
+        # Safely process each item, checking for the existence of a thumbnail.
+        item_summaries = []
+        for item in items:
+            thumbnail_asset = item.assets.get("thumbnail")
+            item_summaries.append({
                 "id": item.id,
                 "datetime": item.datetime,
                 "cloud_cover": item.properties.get("eo:cloud_cover"),
-                "thumbnail_url": item.assets.get("thumbnail", {}).href,
-            }
-            for item in items
-        ]
+                "thumbnail_url": thumbnail_asset.href if thumbnail_asset else None,
+            })
+        # --- END OF FIX ---
         
         return {"search_results": item_summaries}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        # This will now provide more specific error details in the API response
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {type(e).__name__}: {e}")
